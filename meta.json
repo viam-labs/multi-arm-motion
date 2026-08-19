@@ -1,0 +1,29 @@
+{
+  "$schema": "https://dl.viam.dev/module.schema.json",
+  "module_id": "viam:multi-arm-motion",
+  "visibility": "public",
+  "url": "https://github.com/viam-labs/multi-arm-motion",
+  "description": "Drive multiple arms in coordinated motion.",
+  "models": [
+    {
+      "api": "rdk:service:generic",
+      "model": "viam:multi-arm-motion:group",
+      "short_description": "A coordinated group of arms driven together via barrier-fired streamed trajectories.",
+      "markdown_link": "README.md"
+    }
+  ],
+  "applications": null,
+  "markdown_link": "README.md",
+  "entrypoint": "bin/multi-arm-motion",
+  "first_run": "",
+  "build": {
+    "build": "make module.tar.gz",
+    "setup": "make setup",
+    "path": "module.tar.gz",
+    "arch": [
+      "linux/amd64",
+      "linux/arm64",
+      "darwin/arm64"
+    ]
+  }
+}
