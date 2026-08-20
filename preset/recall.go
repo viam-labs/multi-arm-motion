@@ -5,10 +5,8 @@ import (
 	"fmt"
 
 	"go.viam.com/rdk/referenceframe"
-	"go.viam.com/rdk/robot/framesystem"
 
 	"github.com/viam-labs/multi-arm-motion/internal/barrier"
-	"github.com/viam-labs/multi-arm-motion/internal/coord"
 	"github.com/viam-labs/multi-arm-motion/internal/trajgen"
 )
 
@@ -17,21 +15,14 @@ func (s *service) recall(ctx context.Context) error {
 		return errNoSavedPose
 	}
 
-	fs, err := framesystem.NewFromService(ctx, s.fsService, nil)
-	if err != nil {
-		return fmt.Errorf("get framesystem: %w", err)
-	}
-
-	currentInputs := referenceframe.FrameSystemInputs{}
 	currentJoints := make(map[string][]referenceframe.Input, len(s.armOrder))
-	savedJoints := make(map[string][]referenceframe.Input, len(s.armOrder))
+	targetJoints := make(map[string][]referenceframe.Input, len(s.armOrder))
 	for _, name := range s.armOrder {
 		j, err := s.arms[name].JointPositions(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("arm %q: joints: %w", name, err)
 		}
 		currentJoints[name] = j
-		currentInputs[name] = j
 
 		saved, ok := s.cfg.Joints[name]
 		if !ok {
@@ -41,30 +32,7 @@ func (s *service) recall(ctx context.Context) error {
 		for i, v := range saved {
 			savedInputs[i] = v
 		}
-		savedJoints[name] = savedInputs
-	}
-
-	targetJoints := make(map[string][]referenceframe.Input, len(s.armOrder))
-	for _, name := range s.armOrder {
-		model, err := s.arms[name].Kinematics(ctx)
-		if err != nil {
-			return fmt.Errorf("arm %q: kinematics: %w", name, err)
-		}
-		savedPoseInBase, err := model.Transform(savedJoints[name])
-		if err != nil {
-			return fmt.Errorf("arm %q: FK: %w", name, err)
-		}
-		savedPoseInWorld, err := s.fsService.TransformPose(ctx,
-			referenceframe.NewPoseInFrame(name, savedPoseInBase),
-			referenceframe.World, nil)
-		if err != nil {
-			return fmt.Errorf("arm %q: transform to world: %w", name, err)
-		}
-		tj, err := coord.PlanTargetJoints(ctx, s.logger, fs, name, currentInputs, savedPoseInWorld.Pose())
-		if err != nil {
-			return fmt.Errorf("arm %q: plan: %w", name, err)
-		}
-		targetJoints[name] = tj
+		targetJoints[name] = savedInputs
 	}
 
 	var groupMaxDelta float64
