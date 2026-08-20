@@ -1,5 +1,3 @@
-// Package streamer sends a joint trajectory to one arm via
-// MoveThroughJointPositionsStreamed and blocks until playback completes.
 package streamer
 
 import (
@@ -8,7 +6,6 @@ import (
 	"go.viam.com/rdk/components/arm"
 )
 
-// ArmStream is the minimal interface Stream needs from an arm.
 type ArmStream interface {
 	MoveThroughJointPositionsStreamed(
 		ctx context.Context,
@@ -18,10 +15,6 @@ type ArmStream interface {
 	) error
 }
 
-// Stream sends the trajectory as a single batch and blocks until playback
-// completes, ctx is cancelled, or the arm errors. Owns both channels per the
-// RDK contract: caller writes to batches and closes it; caller closes
-// responses only after the arm's method returns.
 func Stream(ctx context.Context, a ArmStream, traj []arm.TrajectoryPoint) error {
 	if len(traj) < 2 {
 		return errAtLeastTwoWaypoints

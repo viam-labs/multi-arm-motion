@@ -6,8 +6,6 @@ import (
 	"go.viam.com/rdk/components/arm"
 )
 
-// Fake implements ArmStream for tests. It records every waypoint received on
-// the batches channel and returns Err (if set) after the caller closes batches.
 type Fake struct {
 	Received []arm.TrajectoryPoint
 	Err      error
