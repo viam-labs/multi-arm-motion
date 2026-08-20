@@ -76,7 +76,7 @@ func (s *service) Jog(ctx context.Context, delta JogDelta) error {
 			s.cfg.waypointSpacing(),
 		)
 		if err != nil {
-			return fmt.Errorf("arm %q: trajgen: %w", name, err)
+			return fmt.Errorf("arm %q: %w", name, err)
 		}
 		ops = append(ops, barrier.Op{Arm: s.arms[name], Trajectory: traj})
 	}
