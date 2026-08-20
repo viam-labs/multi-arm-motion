@@ -4,6 +4,7 @@ package group
 
 import (
 	"context"
+	"fmt"
 
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -20,10 +21,22 @@ func init() {
 	)
 }
 
-type Config struct{}
+type Config struct {
+	Arms []string `json:"arms"`
+}
 
-func (cfg *Config) Validate(_ string) ([]string, []string, error) {
-	return nil, nil, nil
+func (cfg *Config) Validate(path string) ([]string, []string, error) {
+	if len(cfg.Arms) < 2 {
+		return nil, nil, resource.NewConfigValidationError(path, errAtLeastTwoArms)
+	}
+	deps := make([]string, 0, len(cfg.Arms))
+	for i, name := range cfg.Arms {
+		if name == "" {
+			return nil, nil, resource.NewConfigValidationFieldRequiredError(path, fmt.Sprintf("arms[%d]", i))
+		}
+		deps = append(deps, name)
+	}
+	return deps, nil, nil
 }
 
 type service struct {
