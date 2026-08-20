@@ -10,6 +10,12 @@
       "model": "viam:multi-arm-motion:group",
       "short_description": "A coordinated group of arms driven together via barrier-fired streamed trajectories.",
       "markdown_link": "README.md"
+    },
+    {
+      "api": "rdk:component:switch",
+      "model": "viam:multi-arm-motion:preset",
+      "short_description": "A saved coordinated pose the arms can be driven to (or reteach via update config).",
+      "markdown_link": "README.md"
     }
   ],
   "applications": null,
