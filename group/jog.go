@@ -5,14 +5,12 @@ import (
 	"fmt"
 
 	"github.com/golang/geo/r3"
-	"go.viam.com/rdk/motionplan"
-	"go.viam.com/rdk/motionplan/armplanning"
 	"go.viam.com/rdk/referenceframe"
 	"go.viam.com/rdk/robot/framesystem"
 	"go.viam.com/rdk/spatialmath"
 
 	"github.com/viam-labs/multi-arm-motion/internal/barrier"
-	"github.com/viam-labs/multi-arm-motion/internal/trajgen"
+	"github.com/viam-labs/multi-arm-motion/internal/coord"
 )
 
 type JogDelta struct {
@@ -50,66 +48,17 @@ func (s *service) Jog(ctx context.Context, delta JogDelta) error {
 			currentPose.Pose().Orientation(),
 		)
 
-		targetJoints, err := s.planToWorldPose(ctx, fs, name, currentInputs, targetPose)
-		if err != nil {
-			return fmt.Errorf("arm %q: plan: %w", name, err)
-		}
-
-		traj, err := trajgen.Generate(
-			currentJoints[name],
-			targetJoints,
-			s.cfg.maxJointVelRadPerSec(),
-			s.cfg.waypointSpacing(),
+		traj, err := coord.PlanArmToWorldPose(
+			ctx, s.logger, fs, name, currentInputs, currentJoints[name],
+			targetPose, s.cfg.maxJointVelRadPerSec(), s.cfg.waypointSpacing(),
 		)
 		if err != nil {
-			return fmt.Errorf("arm %q: trajgen: %w", name, err)
+			return fmt.Errorf("arm %q: %w", name, err)
 		}
-
 		ops = append(ops, barrier.Op{Arm: s.arms[name], Trajectory: traj})
 	}
 
 	return barrier.Fire(ctx, ops)
-}
-
-func (s *service) planToWorldPose(
-	ctx context.Context,
-	fs *referenceframe.FrameSystem,
-	armName string,
-	startInputs referenceframe.FrameSystemInputs,
-	target spatialmath.Pose,
-) ([]referenceframe.Input, error) {
-	planOpts, err := armplanning.NewPlannerOptionsFromExtra(map[string]interface{}{"timeout": 30.0})
-	if err != nil {
-		return nil, fmt.Errorf("planner options: %w", err)
-	}
-	constraints := motionplan.NewConstraints(
-		[]motionplan.LinearConstraint{{LineToleranceMm: 2.0, OrientationToleranceDegs: 2.0}},
-		nil, nil, nil,
-	)
-	plan, _, err := armplanning.PlanMotion(ctx, s.logger, &armplanning.PlanRequest{
-		FrameSystem: fs,
-		Goals: []*armplanning.PlanState{armplanning.NewPlanState(
-			referenceframe.FrameSystemPoses{
-				armName: referenceframe.NewPoseInFrame(referenceframe.World, target),
-			},
-			nil,
-		)},
-		StartState:     armplanning.NewPlanState(nil, startInputs),
-		Constraints:    constraints,
-		PlannerOptions: planOpts,
-	})
-	if err != nil {
-		return nil, err
-	}
-	steps := plan.Trajectory()
-	if len(steps) < 1 {
-		return nil, fmt.Errorf("empty plan")
-	}
-	joints, ok := steps[len(steps)-1][armName]
-	if !ok {
-		return nil, fmt.Errorf("plan missing %q", armName)
-	}
-	return joints, nil
 }
 
 func parseJog(raw interface{}) (JogDelta, error) {
