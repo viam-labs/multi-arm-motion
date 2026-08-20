@@ -19,22 +19,29 @@ func Generate(
 	if maxJointVelRadPerSec <= 0 {
 		return nil, errPositiveVelocityRequired
 	}
+	maxDelta := MaxJointDelta(from, to)
+	if maxDelta == 0 {
+		return nil, errFromEqualsTo
+	}
+	duration := time.Duration(math.Pi * maxDelta / (2 * maxJointVelRadPerSec) * float64(time.Second))
+	return GenerateWithDuration(from, to, duration, waypointSpacing)
+}
+
+func GenerateWithDuration(
+	from, to []referenceframe.Input,
+	duration time.Duration,
+	waypointSpacing time.Duration,
+) ([]arm.TrajectoryPoint, error) {
+	if len(from) != len(to) {
+		return nil, errLengthMismatch
+	}
+	if duration <= 0 {
+		return nil, errPositiveDurationRequired
+	}
 	if waypointSpacing <= 0 {
 		return nil, errPositiveSpacingRequired
 	}
 
-	maxDelta := 0.0
-	for i := range from {
-		d := math.Abs(to[i] - from[i])
-		if d > maxDelta {
-			maxDelta = d
-		}
-	}
-	if maxDelta == 0 {
-		return nil, errFromEqualsTo
-	}
-
-	duration := time.Duration(math.Pi * maxDelta / (2 * maxJointVelRadPerSec) * float64(time.Second))
 	numSteps := int(duration / waypointSpacing)
 	if numSteps < 1 {
 		numSteps = 1
@@ -49,6 +56,28 @@ func Generate(
 		traj = append(traj, arm.TrajectoryPoint{Time: t, Positions: interpolate(from, to, ease)})
 	}
 	return traj, nil
+}
+
+func MaxJointDelta(from, to []referenceframe.Input) float64 {
+	n := len(from)
+	if len(to) < n {
+		n = len(to)
+	}
+	m := 0.0
+	for i := 0; i < n; i++ {
+		d := math.Abs(to[i] - from[i])
+		if d > m {
+			m = d
+		}
+	}
+	return m
+}
+
+func DurationForMaxDelta(maxDelta float64, maxJointVelRadPerSec float64) time.Duration {
+	if maxJointVelRadPerSec <= 0 || maxDelta <= 0 {
+		return 0
+	}
+	return time.Duration(math.Pi * maxDelta / (2 * maxJointVelRadPerSec) * float64(time.Second))
 }
 
 func interpolate(from, to []referenceframe.Input, frac float64) []referenceframe.Input {

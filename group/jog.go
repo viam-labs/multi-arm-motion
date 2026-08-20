@@ -11,6 +11,7 @@ import (
 
 	"github.com/viam-labs/multi-arm-motion/internal/barrier"
 	"github.com/viam-labs/multi-arm-motion/internal/coord"
+	"github.com/viam-labs/multi-arm-motion/internal/trajgen"
 )
 
 type JogDelta struct {
@@ -35,7 +36,7 @@ func (s *service) Jog(ctx context.Context, delta JogDelta) error {
 	}
 
 	deltaVec := r3.Vector{X: delta.X, Y: delta.Y, Z: delta.Z}
-	ops := make([]barrier.Op, 0, len(s.armOrder))
+	targetJoints := make(map[string][]referenceframe.Input, len(s.armOrder))
 	for _, name := range s.armOrder {
 		currentPose, err := s.fsService.TransformPose(ctx,
 			referenceframe.NewPoseInFrame(name, spatialmath.NewZeroPose()),
@@ -47,10 +48,32 @@ func (s *service) Jog(ctx context.Context, delta JogDelta) error {
 			currentPose.Pose().Point().Add(deltaVec),
 			currentPose.Pose().Orientation(),
 		)
+		tj, err := coord.PlanTargetJoints(ctx, s.logger, fs, name, currentInputs, targetPose)
+		if err != nil {
+			return fmt.Errorf("arm %q: plan: %w", name, err)
+		}
+		targetJoints[name] = tj
+	}
 
-		traj, err := coord.PlanArmToWorldPose(
-			ctx, s.logger, fs, name, currentInputs, currentJoints[name],
-			targetPose, s.cfg.maxJointVelRadPerSec(), s.cfg.waypointSpacing(),
+	var groupMaxDelta float64
+	for _, name := range s.armOrder {
+		if d := trajgen.MaxJointDelta(currentJoints[name], targetJoints[name]); d > groupMaxDelta {
+			groupMaxDelta = d
+		}
+	}
+	if groupMaxDelta == 0 {
+		return nil
+	}
+	duration := trajgen.DurationForMaxDelta(groupMaxDelta, s.cfg.maxJointVelRadPerSec())
+	s.logger.Infof("jog: group max delta %.4f rad, shared duration %v", groupMaxDelta, duration)
+
+	ops := make([]barrier.Op, 0, len(s.armOrder))
+	for _, name := range s.armOrder {
+		traj, err := trajgen.GenerateWithDuration(
+			currentJoints[name],
+			targetJoints[name],
+			duration,
+			s.cfg.waypointSpacing(),
 		)
 		if err != nil {
 			return fmt.Errorf("arm %q: %w", name, err)

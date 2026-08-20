@@ -3,29 +3,22 @@ package coord
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"go.viam.com/rdk/components/arm"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/motionplan"
 	"go.viam.com/rdk/motionplan/armplanning"
 	"go.viam.com/rdk/referenceframe"
 	"go.viam.com/rdk/spatialmath"
-
-	"github.com/viam-labs/multi-arm-motion/internal/trajgen"
 )
 
-func PlanArmToWorldPose(
+func PlanTargetJoints(
 	ctx context.Context,
 	logger logging.Logger,
 	fs *referenceframe.FrameSystem,
 	armName string,
 	startInputs referenceframe.FrameSystemInputs,
-	currentJoints []referenceframe.Input,
 	targetWorld spatialmath.Pose,
-	maxJointVelRadPerSec float64,
-	waypointSpacing time.Duration,
-) ([]arm.TrajectoryPoint, error) {
+) ([]referenceframe.Input, error) {
 	planOpts, err := armplanning.NewPlannerOptionsFromExtra(map[string]interface{}{"timeout": 30.0})
 	if err != nil {
 		return nil, fmt.Errorf("planner options: %w", err)
@@ -53,9 +46,9 @@ func PlanArmToWorldPose(
 	if len(steps) < 1 {
 		return nil, fmt.Errorf("empty plan")
 	}
-	targetJoints, ok := steps[len(steps)-1][armName]
+	joints, ok := steps[len(steps)-1][armName]
 	if !ok {
 		return nil, fmt.Errorf("plan missing %q", armName)
 	}
-	return trajgen.Generate(currentJoints, targetJoints, maxJointVelRadPerSec, waypointSpacing)
+	return joints, nil
 }
