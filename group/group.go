@@ -121,6 +121,16 @@ func (s *service) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 		}
 		return map[string]interface{}{"success": true}, nil
 	}
+	if raw, ok := cmd["execute"]; ok {
+		trajs, err := parseExecute(raw)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.Execute(ctx, trajs); err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"success": true}, nil
+	}
 	return nil, fmt.Errorf("unknown command: %v", cmd)
 }
 
