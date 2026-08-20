@@ -93,6 +93,5 @@ func (s *service) recall(ctx context.Context) error {
 		ops = append(ops, barrier.Op{Arm: s.arms[name], Trajectory: traj})
 	}
 
-	_ = spatialmath.NewZeroPose
 	return barrier.Fire(ctx, ops)
 }
