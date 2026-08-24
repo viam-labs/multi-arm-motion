@@ -16,6 +16,9 @@ type ArmStream interface {
 }
 
 func Stream(ctx context.Context, a ArmStream, traj []arm.TrajectoryPoint) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if len(traj) < 2 {
 		return errAtLeastTwoWaypoints
 	}

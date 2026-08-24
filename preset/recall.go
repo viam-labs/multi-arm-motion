@@ -29,9 +29,7 @@ func (s *service) recall(ctx context.Context) error {
 			return fmt.Errorf("arm %q: no saved joints", name)
 		}
 		savedInputs := make([]referenceframe.Input, len(saved))
-		for i, v := range saved {
-			savedInputs[i] = v
-		}
+		copy(savedInputs, saved)
 		targetJoints[name] = savedInputs
 	}
 
