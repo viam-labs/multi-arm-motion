@@ -16,6 +16,12 @@
       "model": "viam:multi-arm-motion:preset",
       "short_description": "A saved coordinated pose the arms can be driven to (or reteach via update config).",
       "markdown_link": "README.md"
+    },
+    {
+      "api": "rdk:component:button",
+      "model": "viam:multi-arm-motion:sequencer",
+      "short_description": "A button that cycles a list of switches in order, calling SetPosition(2) on each with an optional pause between.",
+      "markdown_link": "README.md"
     }
   ],
   "applications": null,
