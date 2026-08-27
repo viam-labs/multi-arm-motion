@@ -86,8 +86,18 @@ func (s *service) recallConstrained(
 
 	ops := make([]barrier.Op, 0, len(s.armOrder))
 	for _, name := range s.armOrder {
+		// Target: this arm goes to its saved joints, others stay at their current joints.
+		// armplanning rejects a joint-configuration goal that omits any input-enabled frame.
+		targetInputs := make(referenceframe.FrameSystemInputs, len(s.armOrder))
+		for _, other := range s.armOrder {
+			if other == name {
+				targetInputs[other] = targetJoints[other]
+			} else {
+				targetInputs[other] = currentJoints[other]
+			}
+		}
 		pts, err := coord.PlanConstrainedTrajectoryToJoints(
-			ctx, s.logger, fs, name, startInputs, targetJoints[name],
+			ctx, s.logger, fs, name, startInputs, targetInputs,
 			s.cfg.LinearToleranceMm, s.cfg.OrientationToleranceDegs, duration,
 		)
 		if err != nil {

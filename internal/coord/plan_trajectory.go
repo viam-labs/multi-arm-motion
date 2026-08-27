@@ -16,13 +16,18 @@ import (
 // target for armName, subject to the given tolerances, and returns the resulting trajectory as
 // arm.TrajectoryPoint values evenly spaced across totalDuration. If planning fails (which
 // LinearConstraint frequently does for large joint deltas under cbirrt), the error propagates.
+// PlanConstrainedTrajectoryToJoints plans a Cartesian-linear path for one arm.
+// startInputs and targetInputs must contain entries for every input-enabled frame in the frame
+// system — armplanning rejects a joint-configuration goal that omits any of them. Callers that
+// only want one arm to move should set that arm's target and leave the others at their current
+// values.
 func PlanConstrainedTrajectoryToJoints(
 	ctx context.Context,
 	logger logging.Logger,
 	fs *referenceframe.FrameSystem,
 	armName string,
 	startInputs referenceframe.FrameSystemInputs,
-	targetJoints []referenceframe.Input,
+	targetInputs referenceframe.FrameSystemInputs,
 	lineToleranceMm float64,
 	orientationToleranceDegs float64,
 	totalDuration time.Duration,
@@ -38,7 +43,6 @@ func PlanConstrainedTrajectoryToJoints(
 		}},
 		nil, nil, nil,
 	)
-	targetInputs := referenceframe.FrameSystemInputs{armName: targetJoints}
 	plan, _, err := armplanning.PlanMotion(ctx, logger, &armplanning.PlanRequest{
 		FrameSystem:    fs,
 		Goals:          []*armplanning.PlanState{armplanning.NewPlanState(nil, targetInputs)},
