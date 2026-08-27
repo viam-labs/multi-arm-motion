@@ -3,10 +3,13 @@ package preset
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.viam.com/rdk/referenceframe"
+	"go.viam.com/rdk/robot/framesystem"
 
 	"github.com/viam-labs/multi-arm-motion/internal/barrier"
+	"github.com/viam-labs/multi-arm-motion/internal/coord"
 	"github.com/viam-labs/multi-arm-motion/internal/trajgen"
 )
 
@@ -43,8 +46,14 @@ func (s *service) recall(ctx context.Context) error {
 		return nil
 	}
 	duration := trajgen.DurationForMaxDelta(groupMaxDelta, s.cfg.maxJointVelRadPerSec())
-	s.logger.Infof("preset recall: group max delta %.4f rad, shared duration %v", groupMaxDelta, duration)
 
+	if s.cfg.hasConstraints() {
+		s.logger.Infof("preset recall (constrained): group max delta %.4f rad, shared duration %v, tol=%.2fmm/%.2fdeg",
+			groupMaxDelta, duration, s.cfg.LinearToleranceMm, s.cfg.OrientationToleranceDegs)
+		return s.recallConstrained(ctx, currentJoints, targetJoints, duration)
+	}
+
+	s.logger.Infof("preset recall: group max delta %.4f rad, shared duration %v", groupMaxDelta, duration)
 	ops := make([]barrier.Op, 0, len(s.armOrder))
 	for _, name := range s.armOrder {
 		traj, err := trajgen.GenerateWithDuration(
@@ -58,6 +67,34 @@ func (s *service) recall(ctx context.Context) error {
 		}
 		ops = append(ops, barrier.Op{Arm: s.arms[name], Trajectory: traj})
 	}
-
 	return barrier.Fire(ctx, ops)
 }
+
+func (s *service) recallConstrained(
+	ctx context.Context,
+	currentJoints, targetJoints map[string][]referenceframe.Input,
+	duration time.Duration,
+) error {
+	fs, err := framesystem.NewFromService(ctx, s.fsService, nil)
+	if err != nil {
+		return fmt.Errorf("framesystem: %w", err)
+	}
+	startInputs := make(referenceframe.FrameSystemInputs, len(s.armOrder))
+	for _, name := range s.armOrder {
+		startInputs[name] = currentJoints[name]
+	}
+
+	ops := make([]barrier.Op, 0, len(s.armOrder))
+	for _, name := range s.armOrder {
+		pts, err := coord.PlanConstrainedTrajectoryToJoints(
+			ctx, s.logger, fs, name, startInputs, targetJoints[name],
+			s.cfg.LinearToleranceMm, s.cfg.OrientationToleranceDegs, duration,
+		)
+		if err != nil {
+			return fmt.Errorf("arm %q: constrained plan: %w", name, err)
+		}
+		ops = append(ops, barrier.Op{Arm: s.arms[name], Trajectory: pts})
+	}
+	return barrier.Fire(ctx, ops)
+}
+

@@ -37,10 +37,16 @@ func init() {
 }
 
 type Config struct {
-	Arms                  []string             `json:"arms"`
-	Joints                map[string][]float64 `json:"joints,omitempty"`
-	MaxJointVelDegsPerSec float64              `json:"max_joint_vel_degs_per_sec,omitempty"`
-	WaypointSpacingMs     int                  `json:"waypoint_spacing_ms,omitempty"`
+	Arms                     []string             `json:"arms"`
+	Joints                   map[string][]float64 `json:"joints,omitempty"`
+	MaxJointVelDegsPerSec    float64              `json:"max_joint_vel_degs_per_sec,omitempty"`
+	WaypointSpacingMs        int                  `json:"waypoint_spacing_ms,omitempty"`
+	LinearToleranceMm        float64              `json:"linear_tolerance_mm,omitempty"`
+	OrientationToleranceDegs float64              `json:"orientation_tolerance_degs,omitempty"`
+}
+
+func (cfg *Config) hasConstraints() bool {
+	return cfg.LinearToleranceMm > 0 && cfg.OrientationToleranceDegs > 0
 }
 
 func (cfg *Config) Validate(path string) ([]string, []string, error) {
@@ -52,6 +58,15 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 	}
 	if cfg.WaypointSpacingMs < 0 {
 		return nil, nil, resource.NewConfigValidationError(path, errNegativeWaypointSpacing)
+	}
+	if cfg.LinearToleranceMm < 0 {
+		return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("linear_tolerance_mm must be > 0"))
+	}
+	if cfg.OrientationToleranceDegs < 0 {
+		return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("orientation_tolerance_degs must be > 0"))
+	}
+	if (cfg.LinearToleranceMm > 0) != (cfg.OrientationToleranceDegs > 0) {
+		return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("linear_tolerance_mm and orientation_tolerance_degs must be set together"))
 	}
 	deps := make([]string, 0, len(cfg.Arms))
 	seen := map[string]struct{}{}
