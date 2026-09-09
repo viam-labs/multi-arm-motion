@@ -2,6 +2,7 @@
 package main
 
 import (
+	"go.viam.com/rdk/components/button"
 	toggleswitch "go.viam.com/rdk/components/switch"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"
@@ -10,6 +11,7 @@ import (
 	"github.com/viam-labs/multi-arm-motion/group"
 	"github.com/viam-labs/multi-arm-motion/posepreset"
 	"github.com/viam-labs/multi-arm-motion/preset"
+	"github.com/viam-labs/multi-arm-motion/sequencer"
 )
 
 func main() {
@@ -17,5 +19,6 @@ func main() {
 		resource.APIModel{API: generic.API, Model: group.Model},
 		resource.APIModel{API: toggleswitch.API, Model: preset.Model},
 		resource.APIModel{API: toggleswitch.API, Model: posepreset.Model},
+		resource.APIModel{API: button.API, Model: sequencer.Model},
 	)
 }
