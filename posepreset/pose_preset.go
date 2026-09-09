@@ -1,0 +1,211 @@
+package posepreset
+
+import (
+	"context"
+	"fmt"
+	"math"
+	"time"
+
+	"github.com/golang/geo/r3"
+
+	"go.viam.com/rdk/components/arm"
+	toggleswitch "go.viam.com/rdk/components/switch"
+	"go.viam.com/rdk/logging"
+	"go.viam.com/rdk/resource"
+	"go.viam.com/rdk/robot/framesystem"
+	"go.viam.com/rdk/spatialmath"
+)
+
+var Model = resource.NewModel("viam", "multi-arm-motion", "pose-preset")
+
+const (
+	positionIdle  uint32 = 0
+	positionTeach uint32 = 1
+	positionGo    uint32 = 2
+
+	numberOfPositions uint32 = 3
+
+	defaultMaxJointVelDegsPerSec = 30.0
+	defaultWaypointSpacingMs     = 20
+
+	modeBarrier = "barrier"
+)
+
+var positionLabels = []string{"idle", "update config", "go to"}
+
+func init() {
+	resource.RegisterComponent(toggleswitch.API, Model,
+		resource.Registration[toggleswitch.Switch, *Config]{
+			Constructor: newPosePreset,
+		},
+	)
+}
+
+// SavedPose is one arm's target TCP pose in the world frame, using Viam's canonical
+// flat pose JSON shape ({x, y, z, oX, oY, oZ, theta}).
+type SavedPose struct {
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	Z     float64 `json:"z"`
+	OX    float64 `json:"oX"`
+	OY    float64 `json:"oY"`
+	OZ    float64 `json:"oZ"`
+	Theta float64 `json:"theta"`
+}
+
+func (p SavedPose) ToPose() spatialmath.Pose {
+	return spatialmath.NewPose(
+		r3.Vector{X: p.X, Y: p.Y, Z: p.Z},
+		&spatialmath.OrientationVectorDegrees{OX: p.OX, OY: p.OY, OZ: p.OZ, Theta: p.Theta},
+	)
+}
+
+type Config struct {
+	Arms                  []string             `json:"arms"`
+	Poses                 map[string]SavedPose `json:"poses,omitempty"`
+	Mode                  string               `json:"mode,omitempty"`
+	MaxJointVelDegsPerSec float64              `json:"max_joint_vel_degs_per_sec,omitempty"`
+	WaypointSpacingMs     int                  `json:"waypoint_spacing_ms,omitempty"`
+}
+
+func (cfg *Config) Validate(path string) ([]string, []string, error) {
+	if len(cfg.Arms) < 2 {
+		return nil, nil, resource.NewConfigValidationError(path, errAtLeastTwoArms)
+	}
+	if cfg.MaxJointVelDegsPerSec < 0 {
+		return nil, nil, resource.NewConfigValidationError(path, errNegativeMaxJointVel)
+	}
+	if cfg.WaypointSpacingMs < 0 {
+		return nil, nil, resource.NewConfigValidationError(path, errNegativeWaypointSpacing)
+	}
+	switch cfg.Mode {
+	case "", modeBarrier:
+	default:
+		return nil, nil, resource.NewConfigValidationError(path,
+			fmt.Errorf("unknown mode %q; supported: %q", cfg.Mode, modeBarrier))
+	}
+	deps := make([]string, 0, len(cfg.Arms))
+	seen := map[string]struct{}{}
+	for i, name := range cfg.Arms {
+		if name == "" {
+			return nil, nil, resource.NewConfigValidationFieldRequiredError(path, fmt.Sprintf("arms[%d]", i))
+		}
+		if _, dup := seen[name]; dup {
+			return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("duplicate arm %q", name))
+		}
+		seen[name] = struct{}{}
+		deps = append(deps, name)
+	}
+	if cfg.Poses != nil {
+		for _, name := range cfg.Arms {
+			if _, ok := cfg.Poses[name]; !ok {
+				return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("poses missing arm %q", name))
+			}
+		}
+		for name := range cfg.Poses {
+			if _, ok := seen[name]; !ok {
+				return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("poses has arm %q not declared in arms", name))
+			}
+		}
+	}
+	return deps, nil, nil
+}
+
+func (cfg *Config) maxJointVelRadPerSec() float64 {
+	v := cfg.MaxJointVelDegsPerSec
+	if v <= 0 {
+		v = defaultMaxJointVelDegsPerSec
+	}
+	return v * math.Pi / 180
+}
+
+func (cfg *Config) waypointSpacing() time.Duration {
+	ms := cfg.WaypointSpacingMs
+	if ms <= 0 {
+		ms = defaultWaypointSpacingMs
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
+func (cfg *Config) mode() string {
+	if cfg.Mode == "" {
+		return modeBarrier
+	}
+	return cfg.Mode
+}
+
+type service struct {
+	resource.AlwaysRebuild
+	resource.Named
+	logger    logging.Logger
+	cfg       *Config
+	arms      map[string]arm.Arm
+	armOrder  []string
+	fsService framesystem.Service
+	position  uint32
+}
+
+func newPosePreset(_ context.Context, deps resource.Dependencies, conf resource.Config, logger logging.Logger) (toggleswitch.Switch, error) {
+	cfg, err := resource.NativeConfig[*Config](conf)
+	if err != nil {
+		return nil, err
+	}
+
+	arms := make(map[string]arm.Arm, len(cfg.Arms))
+	for _, name := range cfg.Arms {
+		a, err := arm.FromProvider(deps, name)
+		if err != nil {
+			return nil, fmt.Errorf("resolve arm %q: %w", name, err)
+		}
+		arms[name] = a
+	}
+
+	fs, err := framesystem.FromDependencies(deps)
+	if err != nil {
+		return nil, fmt.Errorf("resolve framesystem: %w", err)
+	}
+
+	return &service{
+		Named:     conf.ResourceName().AsNamed(),
+		logger:    logger,
+		cfg:       cfg,
+		arms:      arms,
+		armOrder:  append([]string(nil), cfg.Arms...),
+		fsService: fs,
+	}, nil
+}
+
+func (s *service) SetPosition(ctx context.Context, position uint32, _ map[string]interface{}) error {
+	switch position {
+	case positionIdle:
+		s.position = position
+		return nil
+	case positionTeach:
+		s.position = position
+		defer func() { s.position = positionIdle }()
+		return s.teach(ctx)
+	case positionGo:
+		s.position = position
+		defer func() { s.position = positionIdle }()
+		switch s.cfg.mode() {
+		case modeBarrier:
+			return s.recallBarrier(ctx)
+		default:
+			return fmt.Errorf("unsupported mode %q", s.cfg.mode())
+		}
+	default:
+		return fmt.Errorf("invalid position %d", position)
+	}
+}
+
+func (s *service) GetPosition(_ context.Context, _ map[string]interface{}) (uint32, error) {
+	return s.position, nil
+}
+
+func (s *service) GetNumberOfPositions(_ context.Context, _ map[string]interface{}) (uint32, []string, error) {
+	return numberOfPositions, positionLabels, nil
+}
+
+func (s *service) Close(_ context.Context) error {
+	return nil
+}

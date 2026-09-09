@@ -8,6 +8,7 @@ import (
 	"go.viam.com/rdk/services/generic"
 
 	"github.com/viam-labs/multi-arm-motion/group"
+	"github.com/viam-labs/multi-arm-motion/posepreset"
 	"github.com/viam-labs/multi-arm-motion/preset"
 )
 
@@ -15,5 +16,6 @@ func main() {
 	module.ModularMain(
 		resource.APIModel{API: generic.API, Model: group.Model},
 		resource.APIModel{API: toggleswitch.API, Model: preset.Model},
+		resource.APIModel{API: toggleswitch.API, Model: posepreset.Model},
 	)
 }
