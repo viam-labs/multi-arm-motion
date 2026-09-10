@@ -128,6 +128,13 @@ func TestValidateAcceptsConfiguredTolerances(t *testing.T) {
 	test.That(t, err, test.ShouldBeNil)
 }
 
+func TestValidateAcceptsLogDrift(t *testing.T) {
+	cfg := validConfig()
+	cfg.LogDrift = true
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldBeNil)
+}
+
 func TestConfigDefaults(t *testing.T) {
 	cfg := &Config{}
 	test.That(t, cfg.maxJointVelRadPerSec(), test.ShouldBeGreaterThan, 0.0)

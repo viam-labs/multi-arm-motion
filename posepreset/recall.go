@@ -6,9 +6,11 @@ import (
 
 	"go.viam.com/rdk/referenceframe"
 	"go.viam.com/rdk/robot/framesystem"
+	"go.viam.com/rdk/spatialmath"
 
 	"github.com/viam-labs/multi-arm-motion/internal/barrier"
 	"github.com/viam-labs/multi-arm-motion/internal/coord"
+	"github.com/viam-labs/multi-arm-motion/internal/drift"
 	"github.com/viam-labs/multi-arm-motion/internal/trajgen"
 )
 
@@ -72,5 +74,31 @@ func (s *service) recallBarrier(ctx context.Context) error {
 		ops = append(ops, barrier.Op{Arm: s.arms[name], Trajectory: traj})
 	}
 
-	return barrier.Fire(ctx, ops)
+	if err := barrier.Fire(ctx, ops); err != nil {
+		return err
+	}
+
+	if s.cfg.LogDrift {
+		if res, derr := s.measureDrift(ctx); derr != nil {
+			s.logger.Warnf("drift measurement failed: %v", derr)
+		} else {
+			res.LogAt(s.logger, s.Named.Name().Name, modeBarrier)
+		}
+	}
+	return nil
+}
+
+func (s *service) measureDrift(ctx context.Context) (*drift.Result, error) {
+	if len(s.cfg.Poses) == 0 {
+		return nil, errNoSavedPose
+	}
+	targets := make(map[string]spatialmath.Pose, len(s.armOrder))
+	for _, name := range s.armOrder {
+		saved, ok := s.cfg.Poses[name]
+		if !ok {
+			return nil, fmt.Errorf("arm %q: no saved pose", name)
+		}
+		targets[name] = saved.ToPose()
+	}
+	return drift.Measure(ctx, drift.FramesystemReader(s.fsService), s.armOrder, targets)
 }
