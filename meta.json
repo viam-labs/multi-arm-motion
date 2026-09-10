@@ -28,6 +28,12 @@
       "model": "viam:multi-arm-motion:sequencer",
       "short_description": "A button that steps through a list of switches, driving each to its 'go to' position in order.",
       "markdown_link": "README.md"
+    },
+    {
+      "api": "rdk:component:arm",
+      "model": "viam:multi-arm-motion:coordinated-arm",
+      "short_description": "An arm-shaped resource driven by two arms rigidly coupled by a shared tool (e.g. a sanding board).",
+      "markdown_link": "README.md"
     }
   ],
   "applications": null,
