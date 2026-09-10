@@ -103,6 +103,21 @@ func TestValidatePrimaryFollowerRejectsOffsetForUnknownArm(t *testing.T) {
 	test.That(t, err.Error(), test.ShouldContainSubstring, "arm-3")
 }
 
+func TestValidatePrimaryFollowerAcceptsPosesWithOnlyPrimary(t *testing.T) {
+	cfg := validPrimaryFollowerConfig()
+	cfg.Poses = map[string]SavedPose{"arm-1": samplePose()}
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldBeNil)
+}
+
+func TestValidatePrimaryFollowerRejectsPosesMissingPrimary(t *testing.T) {
+	cfg := validPrimaryFollowerConfig()
+	cfg.Poses = map[string]SavedPose{"arm-2": samplePose()}
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, `poses missing primary "arm-1"`)
+}
+
 func TestValidateRejectsFewerThanTwoArms(t *testing.T) {
 	cfg := &Config{Arms: []string{"arm-1"}}
 	_, _, err := cfg.Validate("pose-preset")

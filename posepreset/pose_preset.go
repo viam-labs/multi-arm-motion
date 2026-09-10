@@ -136,14 +136,22 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 			fmt.Errorf("unknown mode %q; supported: %q, %q", cfg.Mode, modeBarrier, modePrimaryFollower))
 	}
 	if cfg.Poses != nil {
-		for _, name := range cfg.Arms {
-			if _, ok := cfg.Poses[name]; !ok {
-				return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("poses missing arm %q", name))
-			}
-		}
 		for name := range cfg.Poses {
 			if _, ok := seen[name]; !ok {
 				return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("poses has arm %q not declared in arms", name))
+			}
+		}
+		switch cfg.Mode {
+		case "", modeBarrier:
+			for _, name := range cfg.Arms {
+				if _, ok := cfg.Poses[name]; !ok {
+					return nil, nil, resource.NewConfigValidationError(path, fmt.Errorf("poses missing arm %q", name))
+				}
+			}
+		case modePrimaryFollower:
+			if _, ok := cfg.Poses[cfg.Primary]; !ok {
+				return nil, nil, resource.NewConfigValidationError(path,
+					fmt.Errorf("poses missing primary %q", cfg.Primary))
 			}
 		}
 	}
