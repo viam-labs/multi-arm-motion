@@ -68,6 +68,7 @@ type Config struct {
 	WaypointSpacingMs        int                  `json:"waypoint_spacing_ms,omitempty"`
 	LinearToleranceMm        float64              `json:"linear_tolerance_mm,omitempty"`
 	OrientationToleranceDegs float64              `json:"orientation_tolerance_degs,omitempty"`
+	LogDrift                 bool                 `json:"log_drift,omitempty"`
 }
 
 func (cfg *Config) Validate(path string) ([]string, []string, error) {
@@ -226,6 +227,17 @@ func (s *service) GetPosition(_ context.Context, _ map[string]interface{}) (uint
 
 func (s *service) GetNumberOfPositions(_ context.Context, _ map[string]interface{}) (uint32, []string, error) {
 	return numberOfPositions, positionLabels, nil
+}
+
+func (s *service) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	if _, ok := cmd["measure_drift"]; ok {
+		res, err := s.measureDrift(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return res.ToMap(), nil
+	}
+	return nil, resource.ErrDoUnimplemented
 }
 
 func (s *service) Close(_ context.Context) error {
