@@ -41,10 +41,66 @@ func TestValidateHappyPathWithExplicitBarrierMode(t *testing.T) {
 
 func TestValidateRejectsUnknownMode(t *testing.T) {
 	cfg := validConfig()
-	cfg.Mode = "primary_follower"
+	cfg.Mode = "flying"
 	_, _, err := cfg.Validate("pose-preset")
 	test.That(t, err, test.ShouldNotBeNil)
 	test.That(t, err.Error(), test.ShouldContainSubstring, "unknown mode")
+}
+
+func validPrimaryFollowerConfig() *Config {
+	return &Config{
+		Arms:    []string{"arm-1", "arm-2"},
+		Mode:    "primary_follower",
+		Primary: "arm-1",
+		FollowerOffsets: map[string]SavedPose{
+			"arm-2": {X: 0, Y: -1000, Z: 0, OX: 1, OY: 0, OZ: 0, Theta: 180},
+		},
+	}
+}
+
+func TestValidatePrimaryFollowerHappyPath(t *testing.T) {
+	_, _, err := validPrimaryFollowerConfig().Validate("pose-preset")
+	test.That(t, err, test.ShouldBeNil)
+}
+
+func TestValidatePrimaryFollowerRequiresPrimary(t *testing.T) {
+	cfg := validPrimaryFollowerConfig()
+	cfg.Primary = ""
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "primary")
+}
+
+func TestValidatePrimaryFollowerRejectsPrimaryNotInArms(t *testing.T) {
+	cfg := validPrimaryFollowerConfig()
+	cfg.Primary = "arm-3"
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "not in arms list")
+}
+
+func TestValidatePrimaryFollowerRejectsMissingFollowerOffset(t *testing.T) {
+	cfg := validPrimaryFollowerConfig()
+	cfg.FollowerOffsets = map[string]SavedPose{}
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, `missing entry for "arm-2"`)
+}
+
+func TestValidatePrimaryFollowerRejectsOffsetForPrimary(t *testing.T) {
+	cfg := validPrimaryFollowerConfig()
+	cfg.FollowerOffsets["arm-1"] = SavedPose{}
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "must not contain the primary")
+}
+
+func TestValidatePrimaryFollowerRejectsOffsetForUnknownArm(t *testing.T) {
+	cfg := validPrimaryFollowerConfig()
+	cfg.FollowerOffsets["arm-3"] = SavedPose{}
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "arm-3")
 }
 
 func TestValidateRejectsFewerThanTwoArms(t *testing.T) {

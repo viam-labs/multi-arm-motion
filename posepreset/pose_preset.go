@@ -30,7 +30,8 @@ const (
 	defaultLinearToleranceMm        = 2.0
 	defaultOrientationToleranceDegs = 2.0
 
-	modeBarrier = "barrier"
+	modeBarrier         = "barrier"
+	modePrimaryFollower = "primary_follower"
 )
 
 var positionLabels = []string{"idle", "update config", "go to"}
@@ -64,6 +65,8 @@ type Config struct {
 	Arms                     []string             `json:"arms"`
 	Poses                    map[string]SavedPose `json:"poses,omitempty"`
 	Mode                     string               `json:"mode,omitempty"`
+	Primary                  string               `json:"primary,omitempty"`
+	FollowerOffsets          map[string]SavedPose `json:"follower_offsets,omitempty"`
 	MaxJointVelDegsPerSec    float64              `json:"max_joint_vel_degs_per_sec,omitempty"`
 	WaypointSpacingMs        int                  `json:"waypoint_spacing_ms,omitempty"`
 	LinearToleranceMm        float64              `json:"linear_tolerance_mm,omitempty"`
@@ -87,12 +90,6 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 	if cfg.OrientationToleranceDegs < 0 {
 		return nil, nil, resource.NewConfigValidationError(path, errNegativeOrientationTolerance)
 	}
-	switch cfg.Mode {
-	case "", modeBarrier:
-	default:
-		return nil, nil, resource.NewConfigValidationError(path,
-			fmt.Errorf("unknown mode %q; supported: %q", cfg.Mode, modeBarrier))
-	}
 	deps := make([]string, 0, len(cfg.Arms))
 	seen := map[string]struct{}{}
 	for i, name := range cfg.Arms {
@@ -104,6 +101,39 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 		}
 		seen[name] = struct{}{}
 		deps = append(deps, name)
+	}
+	switch cfg.Mode {
+	case "", modeBarrier:
+	case modePrimaryFollower:
+		if cfg.Primary == "" {
+			return nil, nil, resource.NewConfigValidationError(path, errPrimaryRequired)
+		}
+		if _, ok := seen[cfg.Primary]; !ok {
+			return nil, nil, resource.NewConfigValidationError(path,
+				fmt.Errorf("primary %q not in arms list", cfg.Primary))
+		}
+		if _, ok := cfg.FollowerOffsets[cfg.Primary]; ok {
+			return nil, nil, resource.NewConfigValidationError(path,
+				fmt.Errorf("follower_offsets must not contain the primary %q", cfg.Primary))
+		}
+		for _, name := range cfg.Arms {
+			if name == cfg.Primary {
+				continue
+			}
+			if _, ok := cfg.FollowerOffsets[name]; !ok {
+				return nil, nil, resource.NewConfigValidationError(path,
+					fmt.Errorf("follower_offsets missing entry for %q", name))
+			}
+		}
+		for name := range cfg.FollowerOffsets {
+			if _, ok := seen[name]; !ok {
+				return nil, nil, resource.NewConfigValidationError(path,
+					fmt.Errorf("follower_offsets has arm %q not declared in arms", name))
+			}
+		}
+	default:
+		return nil, nil, resource.NewConfigValidationError(path,
+			fmt.Errorf("unknown mode %q; supported: %q, %q", cfg.Mode, modeBarrier, modePrimaryFollower))
 	}
 	if cfg.Poses != nil {
 		for _, name := range cfg.Arms {
@@ -213,6 +243,8 @@ func (s *service) SetPosition(ctx context.Context, position uint32, _ map[string
 		switch s.cfg.mode() {
 		case modeBarrier:
 			return s.recallBarrier(ctx)
+		case modePrimaryFollower:
+			return s.recallPrimaryFollower(ctx)
 		default:
 			return fmt.Errorf("unsupported mode %q", s.cfg.mode())
 		}
