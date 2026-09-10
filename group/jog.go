@@ -36,7 +36,7 @@ func (s *service) Jog(ctx context.Context, delta JogDelta) error {
 	}
 
 	deltaVec := r3.Vector{X: delta.X, Y: delta.Y, Z: delta.Z}
-	targetJoints := make(map[string][]referenceframe.Input, len(s.armOrder))
+	plans := make(map[string][][]referenceframe.Input, len(s.armOrder))
 	for _, name := range s.armOrder {
 		currentPose, err := s.fsService.TransformPose(ctx,
 			referenceframe.NewPoseInFrame(name, spatialmath.NewZeroPose()),
@@ -48,16 +48,20 @@ func (s *service) Jog(ctx context.Context, delta JogDelta) error {
 			currentPose.Pose().Point().Add(deltaVec),
 			currentPose.Pose().Orientation(),
 		)
-		tj, err := coord.PlanTargetJoints(ctx, s.logger, fs, name, currentInputs, targetPose)
+		steps, err := coord.PlanConstrainedTrajectory(
+			ctx, s.logger, fs, name, currentInputs, targetPose,
+			s.cfg.linearToleranceMm(), s.cfg.orientationToleranceDegs(),
+		)
 		if err != nil {
 			return fmt.Errorf("arm %q: plan: %w", name, err)
 		}
-		targetJoints[name] = tj
+		plans[name] = steps
 	}
 
 	var groupMaxDelta float64
 	for _, name := range s.armOrder {
-		if d := trajgen.MaxJointDelta(currentJoints[name], targetJoints[name]); d > groupMaxDelta {
+		end := plans[name][len(plans[name])-1]
+		if d := trajgen.MaxJointDelta(currentJoints[name], end); d > groupMaxDelta {
 			groupMaxDelta = d
 		}
 	}
@@ -65,16 +69,12 @@ func (s *service) Jog(ctx context.Context, delta JogDelta) error {
 		return nil
 	}
 	duration := trajgen.DurationForMaxDelta(groupMaxDelta, s.cfg.maxJointVelRadPerSec())
-	s.logger.Infof("jog: group max delta %.4f rad, shared duration %v", groupMaxDelta, duration)
+	s.logger.Infof("jog (constrained %.2fmm/%.2fdeg): group max delta %.4f rad, shared duration %v",
+		s.cfg.linearToleranceMm(), s.cfg.orientationToleranceDegs(), groupMaxDelta, duration)
 
 	ops := make([]barrier.Op, 0, len(s.armOrder))
 	for _, name := range s.armOrder {
-		traj, err := trajgen.GenerateWithDuration(
-			currentJoints[name],
-			targetJoints[name],
-			duration,
-			s.cfg.waypointSpacing(),
-		)
+		traj, err := trajgen.TimeSpaceSteps(plans[name], duration)
 		if err != nil {
 			return fmt.Errorf("arm %q: %w", name, err)
 		}

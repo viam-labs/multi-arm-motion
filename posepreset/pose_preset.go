@@ -25,8 +25,10 @@ const (
 
 	numberOfPositions uint32 = 3
 
-	defaultMaxJointVelDegsPerSec = 30.0
-	defaultWaypointSpacingMs     = 20
+	defaultMaxJointVelDegsPerSec    = 30.0
+	defaultWaypointSpacingMs        = 20
+	defaultLinearToleranceMm        = 2.0
+	defaultOrientationToleranceDegs = 2.0
 
 	modeBarrier = "barrier"
 )
@@ -41,8 +43,6 @@ func init() {
 	)
 }
 
-// SavedPose is one arm's target TCP pose in the world frame, using Viam's canonical
-// flat pose JSON shape ({x, y, z, oX, oY, oZ, theta}).
 type SavedPose struct {
 	X     float64 `json:"x"`
 	Y     float64 `json:"y"`
@@ -61,11 +61,13 @@ func (p SavedPose) ToPose() spatialmath.Pose {
 }
 
 type Config struct {
-	Arms                  []string             `json:"arms"`
-	Poses                 map[string]SavedPose `json:"poses,omitempty"`
-	Mode                  string               `json:"mode,omitempty"`
-	MaxJointVelDegsPerSec float64              `json:"max_joint_vel_degs_per_sec,omitempty"`
-	WaypointSpacingMs     int                  `json:"waypoint_spacing_ms,omitempty"`
+	Arms                     []string             `json:"arms"`
+	Poses                    map[string]SavedPose `json:"poses,omitempty"`
+	Mode                     string               `json:"mode,omitempty"`
+	MaxJointVelDegsPerSec    float64              `json:"max_joint_vel_degs_per_sec,omitempty"`
+	WaypointSpacingMs        int                  `json:"waypoint_spacing_ms,omitempty"`
+	LinearToleranceMm        float64              `json:"linear_tolerance_mm,omitempty"`
+	OrientationToleranceDegs float64              `json:"orientation_tolerance_degs,omitempty"`
 }
 
 func (cfg *Config) Validate(path string) ([]string, []string, error) {
@@ -77,6 +79,12 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 	}
 	if cfg.WaypointSpacingMs < 0 {
 		return nil, nil, resource.NewConfigValidationError(path, errNegativeWaypointSpacing)
+	}
+	if cfg.LinearToleranceMm < 0 {
+		return nil, nil, resource.NewConfigValidationError(path, errNegativeLinearTolerance)
+	}
+	if cfg.OrientationToleranceDegs < 0 {
+		return nil, nil, resource.NewConfigValidationError(path, errNegativeOrientationTolerance)
 	}
 	switch cfg.Mode {
 	case "", modeBarrier:
@@ -132,6 +140,20 @@ func (cfg *Config) mode() string {
 		return modeBarrier
 	}
 	return cfg.Mode
+}
+
+func (cfg *Config) linearToleranceMm() float64 {
+	if cfg.LinearToleranceMm <= 0 {
+		return defaultLinearToleranceMm
+	}
+	return cfg.LinearToleranceMm
+}
+
+func (cfg *Config) orientationToleranceDegs() float64 {
+	if cfg.OrientationToleranceDegs <= 0 {
+		return defaultOrientationToleranceDegs
+	}
+	return cfg.OrientationToleranceDegs
 }
 
 type service struct {

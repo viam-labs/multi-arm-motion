@@ -104,11 +104,43 @@ func TestValidateRejectsNegativeWaypointSpacing(t *testing.T) {
 	test.That(t, err.Error(), test.ShouldContainSubstring, "waypoint_spacing_ms")
 }
 
+func TestValidateRejectsNegativeLinearTolerance(t *testing.T) {
+	cfg := validConfig()
+	cfg.LinearToleranceMm = -0.5
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "linear_tolerance_mm")
+}
+
+func TestValidateRejectsNegativeOrientationTolerance(t *testing.T) {
+	cfg := validConfig()
+	cfg.OrientationToleranceDegs = -1
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldNotBeNil)
+	test.That(t, err.Error(), test.ShouldContainSubstring, "orientation_tolerance_degs")
+}
+
+func TestValidateAcceptsConfiguredTolerances(t *testing.T) {
+	cfg := validConfig()
+	cfg.LinearToleranceMm = 5.0
+	cfg.OrientationToleranceDegs = 3.5
+	_, _, err := cfg.Validate("pose-preset")
+	test.That(t, err, test.ShouldBeNil)
+}
+
 func TestConfigDefaults(t *testing.T) {
 	cfg := &Config{}
 	test.That(t, cfg.maxJointVelRadPerSec(), test.ShouldBeGreaterThan, 0.0)
 	test.That(t, cfg.waypointSpacing(), test.ShouldEqual, time.Duration(defaultWaypointSpacingMs)*time.Millisecond)
 	test.That(t, cfg.mode(), test.ShouldEqual, modeBarrier)
+	test.That(t, cfg.linearToleranceMm(), test.ShouldEqual, defaultLinearToleranceMm)
+	test.That(t, cfg.orientationToleranceDegs(), test.ShouldEqual, defaultOrientationToleranceDegs)
+}
+
+func TestConfigTolerancesOverrideDefaults(t *testing.T) {
+	cfg := &Config{LinearToleranceMm: 5.0, OrientationToleranceDegs: 3.5}
+	test.That(t, cfg.linearToleranceMm(), test.ShouldEqual, 5.0)
+	test.That(t, cfg.orientationToleranceDegs(), test.ShouldEqual, 3.5)
 }
 
 func TestSavedPoseToPose(t *testing.T) {

@@ -33,22 +33,26 @@ func (s *service) recallBarrier(ctx context.Context) error {
 		currentInputs[name] = j
 	}
 
-	targetJoints := make(map[string][]referenceframe.Input, len(s.armOrder))
+	plans := make(map[string][][]referenceframe.Input, len(s.armOrder))
 	for _, name := range s.armOrder {
 		saved, ok := s.cfg.Poses[name]
 		if !ok {
 			return fmt.Errorf("arm %q: no saved pose", name)
 		}
-		tj, err := coord.PlanTargetJoints(ctx, s.logger, fs, name, currentInputs, saved.ToPose())
+		steps, err := coord.PlanConstrainedTrajectory(
+			ctx, s.logger, fs, name, currentInputs, saved.ToPose(),
+			s.cfg.linearToleranceMm(), s.cfg.orientationToleranceDegs(),
+		)
 		if err != nil {
 			return fmt.Errorf("arm %q: plan: %w", name, err)
 		}
-		targetJoints[name] = tj
+		plans[name] = steps
 	}
 
 	var groupMaxDelta float64
 	for _, name := range s.armOrder {
-		if d := trajgen.MaxJointDelta(currentJoints[name], targetJoints[name]); d > groupMaxDelta {
+		end := plans[name][len(plans[name])-1]
+		if d := trajgen.MaxJointDelta(currentJoints[name], end); d > groupMaxDelta {
 			groupMaxDelta = d
 		}
 	}
@@ -56,16 +60,12 @@ func (s *service) recallBarrier(ctx context.Context) error {
 		return nil
 	}
 	duration := trajgen.DurationForMaxDelta(groupMaxDelta, s.cfg.maxJointVelRadPerSec())
-	s.logger.Infof("pose-preset recall (barrier): group max delta %.4f rad, shared duration %v", groupMaxDelta, duration)
+	s.logger.Infof("pose-preset recall (barrier, constrained %.2fmm/%.2fdeg): group max delta %.4f rad, shared duration %v",
+		s.cfg.linearToleranceMm(), s.cfg.orientationToleranceDegs(), groupMaxDelta, duration)
 
 	ops := make([]barrier.Op, 0, len(s.armOrder))
 	for _, name := range s.armOrder {
-		traj, err := trajgen.GenerateWithDuration(
-			currentJoints[name],
-			targetJoints[name],
-			duration,
-			s.cfg.waypointSpacing(),
-		)
+		traj, err := trajgen.TimeSpaceSteps(plans[name], duration)
 		if err != nil {
 			return fmt.Errorf("arm %q: trajgen: %w", name, err)
 		}
