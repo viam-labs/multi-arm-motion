@@ -16,8 +16,10 @@ import (
 var Model = resource.NewModel("viam", "multi-arm-motion", "group")
 
 const (
-	defaultMaxJointVelDegsPerSec = 30.0
-	defaultWaypointSpacingMs     = 20
+	defaultMaxJointVelDegsPerSec    = 30.0
+	defaultWaypointSpacingMs        = 20
+	defaultLinearToleranceMm        = 2.0
+	defaultOrientationToleranceDegs = 2.0
 )
 
 func init() {
@@ -29,9 +31,11 @@ func init() {
 }
 
 type Config struct {
-	Arms                  []string `json:"arms"`
-	MaxJointVelDegsPerSec float64  `json:"max_joint_vel_degs_per_sec,omitempty"`
-	WaypointSpacingMs     int      `json:"waypoint_spacing_ms,omitempty"`
+	Arms                     []string `json:"arms"`
+	MaxJointVelDegsPerSec    float64  `json:"max_joint_vel_degs_per_sec,omitempty"`
+	WaypointSpacingMs        int      `json:"waypoint_spacing_ms,omitempty"`
+	LinearToleranceMm        float64  `json:"linear_tolerance_mm,omitempty"`
+	OrientationToleranceDegs float64  `json:"orientation_tolerance_degs,omitempty"`
 }
 
 func (cfg *Config) Validate(path string) ([]string, []string, error) {
@@ -43,6 +47,12 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 	}
 	if cfg.WaypointSpacingMs < 0 {
 		return nil, nil, resource.NewConfigValidationError(path, errNegativeWaypointSpacing)
+	}
+	if cfg.LinearToleranceMm < 0 {
+		return nil, nil, resource.NewConfigValidationError(path, errNegativeLinearTolerance)
+	}
+	if cfg.OrientationToleranceDegs < 0 {
+		return nil, nil, resource.NewConfigValidationError(path, errNegativeOrientationTolerance)
 	}
 	deps := make([]string, 0, len(cfg.Arms))
 	for i, name := range cfg.Arms {
@@ -68,6 +78,20 @@ func (cfg *Config) waypointSpacing() time.Duration {
 		ms = defaultWaypointSpacingMs
 	}
 	return time.Duration(ms) * time.Millisecond
+}
+
+func (cfg *Config) linearToleranceMm() float64 {
+	if cfg.LinearToleranceMm <= 0 {
+		return defaultLinearToleranceMm
+	}
+	return cfg.LinearToleranceMm
+}
+
+func (cfg *Config) orientationToleranceDegs() float64 {
+	if cfg.OrientationToleranceDegs <= 0 {
+		return defaultOrientationToleranceDegs
+	}
+	return cfg.OrientationToleranceDegs
 }
 
 type service struct {

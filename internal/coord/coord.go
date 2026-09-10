@@ -11,20 +11,27 @@ import (
 	"go.viam.com/rdk/spatialmath"
 )
 
-func PlanTargetJoints(
+// Returns the planner's full step sequence (not just the endpoint) so callers can
+// execute the planned Cartesian-linear path directly instead of interpolating endpoints.
+func PlanConstrainedTrajectory(
 	ctx context.Context,
 	logger logging.Logger,
 	fs *referenceframe.FrameSystem,
 	armName string,
 	startInputs referenceframe.FrameSystemInputs,
 	targetWorld spatialmath.Pose,
-) ([]referenceframe.Input, error) {
+	lineToleranceMm float64,
+	orientationToleranceDegs float64,
+) ([][]referenceframe.Input, error) {
 	planOpts, err := armplanning.NewPlannerOptionsFromExtra(map[string]interface{}{"timeout": 30.0})
 	if err != nil {
 		return nil, fmt.Errorf("planner options: %w", err)
 	}
 	constraints := motionplan.NewConstraints(
-		[]motionplan.LinearConstraint{{LineToleranceMm: 2.0, OrientationToleranceDegs: 2.0}},
+		[]motionplan.LinearConstraint{{
+			LineToleranceMm:          lineToleranceMm,
+			OrientationToleranceDegs: orientationToleranceDegs,
+		}},
 		nil, nil, nil,
 	)
 	plan, _, err := armplanning.PlanMotion(ctx, logger, &armplanning.PlanRequest{
@@ -43,12 +50,16 @@ func PlanTargetJoints(
 		return nil, fmt.Errorf("plan: %w", err)
 	}
 	steps := plan.Trajectory()
-	if len(steps) < 1 {
-		return nil, fmt.Errorf("empty plan")
+	if len(steps) < 2 {
+		return nil, fmt.Errorf("plan has %d steps; need at least 2 to execute", len(steps))
 	}
-	joints, ok := steps[len(steps)-1][armName]
-	if !ok {
-		return nil, fmt.Errorf("plan missing %q", armName)
+	out := make([][]referenceframe.Input, 0, len(steps))
+	for i, step := range steps {
+		joints, ok := step[armName]
+		if !ok {
+			return nil, fmt.Errorf("plan step %d missing %q", i, armName)
+		}
+		out = append(out, joints)
 	}
-	return joints, nil
+	return out, nil
 }

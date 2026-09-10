@@ -80,6 +80,24 @@ func DurationForMaxDelta(maxDelta float64, maxJointVelRadPerSec float64) time.Du
 	return time.Duration(math.Pi * maxDelta / (2 * maxJointVelRadPerSec) * float64(time.Second))
 }
 
+// Unlike Generate/GenerateWithDuration, this does not interpolate — it only adds time
+// stamps, preserving the shape of an externally-planned trajectory.
+func TimeSpaceSteps(steps [][]referenceframe.Input, duration time.Duration) ([]arm.TrajectoryPoint, error) {
+	if len(steps) < 2 {
+		return nil, errAtLeastTwoSteps
+	}
+	if duration <= 0 {
+		return nil, errPositiveDurationRequired
+	}
+	denom := int64(len(steps) - 1)
+	out := make([]arm.TrajectoryPoint, 0, len(steps))
+	for i, step := range steps {
+		t := time.Duration(int64(duration) * int64(i) / denom)
+		out = append(out, arm.TrajectoryPoint{Time: t, Positions: cloneJoints(step)})
+	}
+	return out, nil
+}
+
 func interpolate(from, to []referenceframe.Input, frac float64) []referenceframe.Input {
 	out := make([]referenceframe.Input, len(from))
 	for i := range from {

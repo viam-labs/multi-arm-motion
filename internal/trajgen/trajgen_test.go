@@ -87,6 +87,54 @@ func TestGenerateRejectsFromEqualsTo(t *testing.T) {
 	test.That(t, err, test.ShouldEqual, errFromEqualsTo)
 }
 
+func TestTimeSpaceStepsHappyPath(t *testing.T) {
+	steps := [][]referenceframe.Input{
+		{0, 0},
+		{0.25, 0.1},
+		{0.5, 0.2},
+		{0.75, 0.3},
+		{1.0, 0.4},
+	}
+	traj, err := TimeSpaceSteps(steps, 400*time.Millisecond)
+	test.That(t, err, test.ShouldBeNil)
+	test.That(t, len(traj), test.ShouldEqual, len(steps))
+
+	test.That(t, traj[0].Time, test.ShouldEqual, time.Duration(0))
+	test.That(t, traj[len(traj)-1].Time, test.ShouldEqual, 400*time.Millisecond)
+	test.That(t, traj[2].Time, test.ShouldEqual, 200*time.Millisecond)
+
+	for i, step := range steps {
+		for j, v := range step {
+			test.That(t, traj[i].Positions[j], test.ShouldAlmostEqual, v, 1e-9)
+		}
+	}
+}
+
+func TestTimeSpaceStepsRejectsTooFewSteps(t *testing.T) {
+	_, err := TimeSpaceSteps([][]referenceframe.Input{{0}}, 100*time.Millisecond)
+	test.That(t, err, test.ShouldEqual, errAtLeastTwoSteps)
+
+	_, err = TimeSpaceSteps(nil, 100*time.Millisecond)
+	test.That(t, err, test.ShouldEqual, errAtLeastTwoSteps)
+}
+
+func TestTimeSpaceStepsRejectsNonPositiveDuration(t *testing.T) {
+	steps := [][]referenceframe.Input{{0}, {1}}
+	_, err := TimeSpaceSteps(steps, 0)
+	test.That(t, err, test.ShouldEqual, errPositiveDurationRequired)
+
+	_, err = TimeSpaceSteps(steps, -1)
+	test.That(t, err, test.ShouldEqual, errPositiveDurationRequired)
+}
+
+func TestTimeSpaceStepsClonesPositions(t *testing.T) {
+	steps := [][]referenceframe.Input{{0, 0}, {1, 1}}
+	traj, err := TimeSpaceSteps(steps, 100*time.Millisecond)
+	test.That(t, err, test.ShouldBeNil)
+	steps[0][0] = 99
+	test.That(t, traj[0].Positions[0], test.ShouldEqual, 0.0)
+}
+
 func TestGenerateDeterministic(t *testing.T) {
 	from := []referenceframe.Input{0, 0, 0}
 	to := []referenceframe.Input{1, 0.5, 0.25}
