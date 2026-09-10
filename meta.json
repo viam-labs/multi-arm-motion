@@ -20,7 +20,7 @@
     {
       "api": "rdk:component:switch",
       "model": "viam:multi-arm-motion:pose-preset",
-      "short_description": "A saved coordinated set of per-arm TCP world poses the arms can be driven to (or reteach via update config).",
+      "short_description": "A saved set of per-arm TCP world poses the arms can be driven to (or reteach via update config).",
       "markdown_link": "README.md"
     },
     {
