@@ -11,6 +11,8 @@ import (
 	"go.viam.com/rdk/resource"
 	"go.viam.com/rdk/robot/framesystem"
 	"go.viam.com/rdk/services/generic"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var Model = resource.NewModel("viam", "multi-arm-motion", "group")
@@ -138,7 +140,7 @@ func (s *service) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	if raw, ok := cmd["jog"]; ok {
 		delta, err := parseJog(raw)
 		if err != nil {
-			return nil, err
+			return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 		}
 		if err := s.Jog(ctx, delta); err != nil {
 			return nil, err
@@ -148,14 +150,14 @@ func (s *service) DoCommand(ctx context.Context, cmd map[string]interface{}) (ma
 	if raw, ok := cmd["execute"]; ok {
 		trajs, err := parseExecute(raw)
 		if err != nil {
-			return nil, err
+			return nil, status.Errorf(codes.InvalidArgument, "%v", err)
 		}
 		if err := s.Execute(ctx, trajs); err != nil {
 			return nil, err
 		}
 		return map[string]interface{}{"success": true}, nil
 	}
-	return nil, fmt.Errorf("unknown command: %v", cmd)
+	return nil, status.Errorf(codes.InvalidArgument, "unknown command: %v", cmd)
 }
 
 func (s *service) Close(_ context.Context) error {

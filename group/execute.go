@@ -2,11 +2,14 @@ package group
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"go.viam.com/rdk/components/arm"
 	"go.viam.com/rdk/referenceframe"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/viam-labs/multi-arm-motion/internal/barrier"
 )
@@ -14,12 +17,12 @@ import (
 func (s *service) Execute(ctx context.Context, trajectories map[string][]arm.TrajectoryPoint) error {
 	for _, name := range s.armOrder {
 		if _, ok := trajectories[name]; !ok {
-			return fmt.Errorf("execute: missing trajectory for arm %q", name)
+			return status.Errorf(codes.InvalidArgument, "execute: missing trajectory for arm %q", name)
 		}
 	}
 	for name := range trajectories {
 		if _, ok := s.arms[name]; !ok {
-			return fmt.Errorf("execute: trajectory for unknown arm %q", name)
+			return status.Errorf(codes.InvalidArgument, "execute: trajectory for unknown arm %q", name)
 		}
 	}
 
@@ -27,7 +30,13 @@ func (s *service) Execute(ctx context.Context, trajectories map[string][]arm.Tra
 	for _, name := range s.armOrder {
 		ops = append(ops, barrier.Op{Arm: s.arms[name], Trajectory: trajectories[name]})
 	}
-	return barrier.Fire(ctx, ops)
+	if err := barrier.Fire(ctx, ops); err != nil {
+		if errors.Is(err, barrier.ErrFireTimeout) {
+			return status.Errorf(codes.DeadlineExceeded, "execute timed out: %v", err)
+		}
+		return status.Errorf(codes.Internal, "execute: %v", err)
+	}
+	return nil
 }
 
 func parseExecute(raw interface{}) (map[string][]arm.TrajectoryPoint, error) {
