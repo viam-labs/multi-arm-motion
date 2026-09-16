@@ -64,3 +64,28 @@ func TestFireRespectsParentContextCancellation(t *testing.T) {
 	err := Fire(ctx, ops)
 	test.That(t, err, test.ShouldEqual, context.Canceled)
 }
+
+type hangingStream struct{}
+
+func (h *hangingStream) MoveThroughJointPositionsStreamed(
+	ctx context.Context,
+	_ <-chan []arm.TrajectoryPoint,
+	_ chan<- arm.Response,
+	_ map[string]any,
+) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestFireTimesOutOnHungStreamer(t *testing.T) {
+	ops := []Op{
+		{Arm: &hangingStream{}, Trajectory: makeTraj(2)},
+	}
+
+	start := time.Now()
+	err := Fire(context.Background(), ops)
+	elapsed := time.Since(start)
+
+	test.That(t, errors.Is(err, ErrFireTimeout), test.ShouldBeTrue)
+	test.That(t, elapsed, test.ShouldBeLessThan, 15*time.Second)
+}
