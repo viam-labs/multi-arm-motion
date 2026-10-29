@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/golang/geo/r3"
 
@@ -195,4 +196,21 @@ func (s *service) IsMoving(ctx context.Context) (bool, error) {
 
 func (s *service) DoCommand(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 	return nil, resource.ErrDoUnimplemented
+}
+
+func (s *service) Properties(ctx context.Context, extra map[string]interface{}) (arm.Properties, error) {
+	return s.primary.Properties(ctx, extra)
+}
+
+func (s *service) ManualMode(ctx context.Context, extra map[string]interface{}) (bool, error) {
+	return s.primary.ManualMode(ctx, extra)
+}
+
+func (s *service) SetManualMode(ctx context.Context, manualMode bool, enabledFor time.Duration, extra map[string]interface{}) error {
+	pErr := s.primary.SetManualMode(ctx, manualMode, enabledFor, extra)
+	fErr := s.follower.SetManualMode(ctx, manualMode, enabledFor, extra)
+	if pErr != nil {
+		return pErr
+	}
+	return fErr
 }

@@ -4,10 +4,10 @@ go 1.25.10
 
 require (
 	github.com/golang/geo v0.0.0-20230421003525-6adc56603217
-	go.viam.com/api v0.1.577
-	go.viam.com/rdk v1.6.0
+	go.viam.com/api v0.1.579
+	go.viam.com/rdk v1.8.0
 	go.viam.com/test v1.2.5
-	go.viam.com/utils v0.12.0
+	go.viam.com/utils v0.12.1
 )
 
 require (
@@ -62,7 +62,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chenzhekl/goply v0.0.0-20190930133256-258c2381defd // indirect
 	github.com/chewxy/hm v1.0.0 // indirect
-	github.com/chewxy/math32 v1.0.8 // indirect
+	github.com/chewxy/math32 v1.11.2 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.5.0 // indirect
 	github.com/cloudwego/base64x v0.1.7 // indirect
